@@ -55,7 +55,7 @@ b.side(:b, footmen=rand(5..10), archers=rand(5..10), cavalry=rand(5..10))
 b.resolve
 
 puts "AI PROMPT"
-puts b.ai_prompt "Stevedom", "The Jimpire", "Wraithdale"
+puts b.ai_prompt "the Lanisters", "The Starks", "Oxcross"
 
 puts "-"* 50
 puts "STARTING TROOPS"
