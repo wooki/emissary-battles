@@ -1,11 +1,16 @@
 # Emissary Battles
 Starting with two definitions of armies work how who wins.
 
+Test on the command line
+```
+emissary-battle-demo
+```
+
 Import some utils.
 ```
 require 'pp'
 require 'logger'
-require 'very-simple-battle-resolver'
+require 'emissary-battles'
 ```
 
 Setup some logging.
