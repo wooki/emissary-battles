@@ -1,11 +1,14 @@
 Gem::Specification.new do |s|
-  s.name        = "very-simple-battle-resolver"
+  s.name        = "emissary-battles"
   s.version     = "1.0.0"
   s.summary     = "Very Simple Battle Resolver"
   s.description = "Starting with two definitions of armies work how who wins."
   s.authors     = ["Jim Rowe"]
   s.email       = "jim@jimcode.org"
-  s.files       = ["lib/very-simple-battle-resolver.rb"]
-  s.homepage    = "https://jimcode.org/very-simple-battle-resolver"
-  s.license       = "Copyright James Rowe 2024"
+  s.files       = ["lib/emissary-battles.rb"]
+  s.homepage    = "https://jimcode.org/emissary/battles"
+  s.license       = "MIT"
+  s.executables = ['emissary-battle-demo']
+  s.require_paths = ["lib"]
 end
+

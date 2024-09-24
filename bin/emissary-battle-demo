@@ -1,29 +1,14 @@
-# Emissary Battles
-Starting with two definitions of armies work how who wins.
+#!/usr/bin/env ruby
 
-Import some utils.
-```
 require 'pp'
 require 'logger'
-require 'very-simple-battle-resolver'
-```
+require_relative '../lib/emissary-battles'
 
-Setup some logging.
-```
 logger = Logger.new STDOUT
 logger.level = Logger::WARN
 # logger.level = Logger::INFO
-```
+# logger.level = Logger::INFO
 
-Allow rerunning with the same results.
-```
-SEED = Random.new_seed
-puts "SEED: #{SEED}"
-Random.srand(SEED)
-```
-
-Create a new battle and set-up the parameters.
-```
 b = Emissary::Battle.new(logger)
 
 # b.format = :json
@@ -70,7 +55,7 @@ b.side(:b, footmen=rand(5..10), archers=rand(5..10), cavalry=rand(5..10))
 b.resolve
 
 puts "AI PROMPT"
-puts b.ai_prompt "the Lanisters", "The Starks", "Oxcross"
+puts b.ai_prompt "Stevedom", "The Jimpire", "Wraithdale"
 
 puts "-"* 50
 puts "STARTING TROOPS"
@@ -81,4 +66,3 @@ pp b.summary[:troops]
 puts "-"* 50
 puts b.summary[:title]
 puts "-"* 50
-```

@@ -1,0 +1,15 @@
+GEM
+  remote: https://rubygems.org/
+  specs:
+    humanize (2.5.1)
+    logger (1.6.1)
+
+PLATFORMS
+  x86_64-linux
+
+DEPENDENCIES
+  humanize
+  logger
+
+BUNDLED WITH
+   2.2.3

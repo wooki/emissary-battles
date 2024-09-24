@@ -1,5 +1,6 @@
 require 'pp'
 require 'logger'
+require 'humanize'
 
 # resolve a battle between two armies in Emissary game
 # based on combat system of battlemist
@@ -18,9 +19,12 @@ BATTLE_ARCHER_RALLY_CHANCE = 0.04 # 4%
 BATTLE_CAVALRY_RALLY_CHANCE = 0.15 # 15%
 BATTLE_SHIP_RALLY_CHANCE = 0.25 # 25%
 
+module Emissary
 class Battle
 
-	def initialize(logger=Logger.new(STDOUT), weather=:mild, terrain=:lowlannd, advantage=nil)
+	attr_accessor :summary, :weather, :terrain, :advantage, :troops, :routed, :elite, :format, :premature_end, :events
+
+	def initialize(logger=Logger.new(STDOUT), weather=:mild, terrain=:lowland, advantage=nil)
 
 		@logger = logger
 		@already_resolved = false # only allow resolve once
@@ -28,6 +32,8 @@ class Battle
 		self.terrain = terrain
 		self.advantage = advantage
 		@premature_end = 0
+		@summary = nil
+		@events = []
 
 		@troops = Hash.new
 		@routed = Hash.new
@@ -408,24 +414,40 @@ class Battle
 		attack_summary
 	end
 
+	def attack_summary_to_events(attack_summary)
+
+    [
+      attack_summary[:a_attack][:kill] > 0 || attack_summary[:a_attack][:route] > 0 ? "#{attack_summary[:title]} from side A attacked#{attack_summary[:a_attack][:kill] > 0 ? " killing #{attack_summary[:a_attack][:kill]} regiments" : ""}#{attack_summary[:a_attack][:route] > 0 ? " and routing #{attack_summary[:a_attack][:route]} regiments" : ""} on side B." : nil,
+      attack_summary[:b_attack][:kill] > 0 || attack_summary[:b_attack][:route] > 0 ? "#{attack_summary[:title]} from side B attacked#{attack_summary[:b_attack][:kill] > 0 ? " killing #{attack_summary[:b_attack][:kill]} regiments" : ""}#{attack_summary[:b_attack][:route] > 0 ? " and routing #{attack_summary[:b_attack][:route]} regiments" : ""} on side A." : nil,
+    ].compact
+	end
+
 	# make attacks for both sides of archers
 	def archers
-		@logger.debug self.make_attack(:archers, [:footmen, :cavalry], [:archers]).pretty_inspect
+		attack = self.make_attack(:archers, [:footmen, :cavalry], [:archers])
+		@logger.debug attack
+		@events.concat(self.attack_summary_to_events(attack))
 	end
 
 	# make attacks for both sides of cavalry
 	def cavalry
-		@logger.debug self.make_attack(:cavalry, [:cavalry], [:archers, :footmen]).pretty_inspect
+		attack = self.make_attack(:cavalry, [:cavalry], [:archers, :footmen])
+		@logger.debug attack
+		@events.concat(self.attack_summary_to_events(attack))
 	end
 
 	# make attacks for both sides of footmen
 	def footmen
-		@logger.debug self.make_attack(:footmen, [:footmen, :cavalry, :archers], []).pretty_inspect
+		attack = self.make_attack(:footmen, [:footmen, :cavalry, :archers], [])
+		@logger.debug attack
+		@events.concat(self.attack_summary_to_events(attack))
 	end
 
 	# make attacks for both sides of ships
 	def ships
-		@logger.debug self.make_attack(:ships, [:ships], []).pretty_inspect
+		attack = self.make_attack(:ships, [:ships], [])
+		@logger.debug attack
+		@events.concat(self.attack_summary_to_events(attack))
 	end
 
 	def rally_check(side, type, chance)
@@ -447,6 +469,24 @@ class Battle
 		count
 	end
 
+	def rally_summary_to_events(rally_summary)
+
+  		events = []
+
+  		[:a, :b].each do |side|
+  			rallied_troops = rally_summary[side].values.sum
+  			if rallied_troops > 0
+  				unit_types = rally_summary[side].select { |_, count| count > 0 }
+  					.map { |type, count| "#{count} regiments of #{type}" }
+  					.join(", ")
+  				events << "Side #{side.to_s.upcase} rallied #{rallied_troops} regiments, which included #{unit_types}."
+  			end
+  		end
+
+  		events
+
+	end
+
 	# check all routed units and see if they rejoin
 	def rally
 
@@ -464,14 +504,17 @@ class Battle
 			:ships => self.rally_check(:b, :ships, BATTLE_SHIP_RALLY_CHANCE)
 		}
 
-		@logger.info rally_summary.pretty_inspect
+
+		@logger.debug rally_summary.pretty_inspect
+
+		@events.concat rally_summary_to_events(rally_summary)
 
 	end
 
 	# run one round of combat, returns :a, :b, :ab for overrun
 	def round(i)
 
-		@logger.info({
+		@logger.debug({
 			:title => "Round #{i}",
 			:troops => @troops,
 			:routed => @routed
@@ -510,11 +553,11 @@ class Battle
 				self.ships
 
 			else
-				# cavalry fight
-				self.cavalry
-
 				# archers fire
 				self.archers
+
+				# cavalry fight
+				self.cavalry
 
 				# footmen fight
 				self.footmen
@@ -529,6 +572,9 @@ class Battle
 
 		return if @already_resolved
 
+		# remember troops before combat
+		@starttroops = Marshal.load(Marshal.dump(@troops))
+
 		# run rounds until one side overrun
 		round = 0
 		overrun = nil
@@ -540,8 +586,10 @@ class Battle
 		# winning side gets one extra combat round - a chance ot get extra casualties
 		result_title = "Draw"
 		if overrun == :a
+				@events << "Side A was routed and fled the battlefield."
 				result_title = "Victory for B"
 		elsif overrun == :b
+			@events << "Side B was routed and fled the battlefield."
 				result_title = "Victory for A"
 		end
 
@@ -562,19 +610,69 @@ class Battle
     @routed[:a][:cavalry] = @routed[:a][:cavalry] + @routed[:b][:cavalry] if @routed[:a][:cavalry]
 		@routed[:a][:ships] = @routed[:a][:ships] + @routed[:b][:ships] if @routed[:a][:ships]
 
-		summary = {
+		@summary = {
 			:title => result_title,
 			:length => round,
 			:overrun => overrun,
 			:advantage => @advantage,
 			:terrain => @terrain,
-			:weather => @weatherk,
+			:weather => @weather,
+			:starttroops => @starttroops,
 			:troops => @troops,
 			:mercenaries => @routed[:a]
 		}
 
-		@logger.info summary.pretty_inspect
-		summary
+		@logger.debug @summary.pretty_inspect
+		@summary
 	end
 
+	def ai_prompt(side_a_name, side_b_name, location)
+		result = "a draw"
+		if @summary[:overrun] == :a
+			result = "victory for #{side_b_name}"
+		elsif @summary[:overrun] == :b
+			result = "victory for #{side_a_name}"
+		end
+
+		troop_types = [:footmen, :archers, :cavalry, :ships]
+		has_ships = @summary[:starttroops][:a][:ships] != nil && @summary[:starttroops][:b][:ships] != nil &&
+		(@summary[:starttroops][:a][:ships] > 0 || @summary[:starttroops][:b][:ships] > 0)
+
+		troop_description = lambda do |side, time|
+			troops = troop_types.select { |t| has_ships ? t == :ships : t != :ships }
+			troops.map { |t| "#{(@summary[time][side][t]*100).humanize} hundred #{t}" }.join(", ")
+		end
+
+		focus = ['strategy', 'heroism', 'weather impact', 'terrain challenges', 'morale', 'casualties and the aftermath'].sample
+		perspectives = ['a foot soldier', 'a general', 'a local villager observing', 'a historian', 'a storyteller', 'a gamesmaster'].sample
+		tone = ['triumphant', 'somber', 'chaotic', 'awe-inspiring', 'epic', 'tense', 'grim', 'melancholic', 'tragic', 'victorious', 'glorious'].sample
+
+		instructions = <<-TEXT
+	Describe a medieval battle between #{side_a_name} and #{side_b_name} that has taken place at #{location}.
+	The battle was fought in #{@summary[:terrain]} terrain and the weather was #{@summary[:weather]}.
+	Describe the terrain and weather in more detail or not at all if it is not relevant.
+	Incorporate sensory details like the sounds of battle, the smell of the battlefield, and the sight of the terrain.
+	Highlight the actions and decisions of key characters or leaders on both sides without mentioning their names.
+	Use dynamic and varied language to keep the narrative engaging and avoid repetition.
+	Focus on the #{focus} and how it influenced the battle's outcome.
+	Tell the story from the perspective of #{perspectives}.
+	Do not mention this perspective in the description.
+	Tell the story with a #{tone} tone.
+	Do not use a precise time for the battle but give a sense of when it happened and how long it lasted if possible.
+	The army of #{side_a_name} consisted of #{troop_description.call(:a, :starttroops)}.
+	The army of #{side_b_name} consisted of #{troop_description.call(:b, :starttroops)}.
+	The battle lasted for #{@summary[:length] * 0.5} hours and commenced as follows (with side A being #{side_a_name} and side B being #{side_b_name}):
+	#{@events.map { |e| e.to_s }.join("\n")}
+	The battle ended with #{result}.
+	Highlight where and why the battle ended as it did.
+	After the battle the army of #{side_a_name} consisted of #{troop_description.call(:a, :troops)}.
+	After the battle the army of #{side_b_name} consisted of #{troop_description.call(:b, :troops)}.
+	When referring to the number of troops, it will always be a battle with ships or with land troops, not a mix of both.
+	Keep the summary to a maximum of #{50 + (@summary[:length] * 25)} words.
+	Include actions or events that reflect the numbers of troops on each side and how that changed from the start and end of the battle.
+	TEXT
+
+		instructions.split("\n").join(" ").gsub(/\s+/,' ').strip
+	end
+end
 end
